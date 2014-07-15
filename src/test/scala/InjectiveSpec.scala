@@ -42,7 +42,8 @@ object ADT {
   case object InfoLevel extends LogLevel
   case object DebugLevel extends LogLevel
 
-  case class Log[A](level: LogLevel, msg: String)
+  trait Log[A]
+  case class LogEntry(level: LogLevel, msg: String) extends Log[(LogLevel, String)]
 
   sealed trait Storage[K, V, A]
   case class Get[K, V](key: K) extends Storage[K, V, V]
@@ -60,7 +61,7 @@ class ShapelessSpec extends FlatSpec with Matchers {
   "ShapeApp" should "run 1st App" in {
 
     // APP DEFINITION
-    type App[A]     = Interact[A] :+: Auth[A] :+: CNil
+    type App[A]     = Interact[A] :+: Auth[A] :+: Log[A] :+: CNil
     type CoyoApp[A] = Coyoneda[App, A]
 
     // THE HELPERS
@@ -74,21 +75,28 @@ class ShapelessSpec extends FlatSpec with Matchers {
       def hasPermission(u: User, p: Permission) = Copoyo[App](HasPermission(u, p))
     }
 
+    object logs {
+      def log(l: LogLevel, m: String) = Copoyo[App](LogEntry(l, m))
+    }
+
     val KnowSecret = "KnowSecret"
 
     // THE PROGRAM
     val prg = {
-      import interacts._, auths._
+      import  interacts._, auths._, logs._
+
       for {
         uid <- ask("What's your user ID?")
         pwd <- ask("Password, please.")
         u   <- login(uid, pwd)
         b   <- u map (hasPermission(_, KnowSecret)) getOrElse (Free.Return[CoyoApp, Boolean](false))
         _   <- if (b) tell("UUDDLRLRBA") else tell("Go away!")
+        _   <- if (b) log(ErrorLevel, "UUDDLRLRBA") else log(DebugLevel, "Go away!")
       } yield ()
     }
 
     // THE INTERPRETERS
+
     object Console extends (Interact ~> Id) {
       def apply[A](i: Interact[A]) = i match {
         case Ask(prompt) =>
@@ -110,11 +118,22 @@ class ShapelessSpec extends FlatSpec with Matchers {
       }
     }
 
+    object Logger extends (Log ~> Id) {
+      def apply[A](i: Log[A]) = i match {
+        case LogEntry(l, m) =>
+          println(s"[$l] m")
+          (l, m)
+      }
+    }
 
     // THE EXECUTION
-    val interpreters: App ~> Id = Console or TestAuth
-    val lis: CoyoApp ~> Id = liftCoyoLeft(interpreters)
-    prg.mapSuspension(lis)
+    val pi = new RichNat0(Console) or TestAuth
+    // val interpreters: App ~> Id = new RichNat(pi) or Logger
+    // val lis: CoyoApp ~> Id = liftCoyoLeft(interpreters)
+    type XX[T] = Interact[T] :+: Auth[T] :+: CNil
+    val lis: XX ~> Id = Console or TestAuth
+    new RichNat(lis)
+    // prg.mapSuspension(lis)
 
   }
 

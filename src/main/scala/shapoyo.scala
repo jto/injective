@@ -9,16 +9,28 @@ import shapeless.ops.coproduct.{Inject, Selector}
 import shapeless.{Coproduct, Inl, Inr, CNil, :+:, Poly1}
 import shapeless.poly._
 
-object Shapoyo {
+trait LowPriorityRichNat {
+  implicit class RichNat0[F[_], R[_]](val f: F ~> R) {
+    def or[G[_]](g: G ~> R) =
+      new ~>[({ type C[T] = F[T] :+: G[T] :+: CNil })#C, R] {
+        def apply[T](c: F[T] :+: G[T] :+: CNil): R[T] = c match {
+          case Inl(h) => f(h)
+          case Inr(Inl(t)) => g(t)
+        }
+      }
+  }
+}
 
-  type CoproductA[F[_], G[_], A] = F[A] :+: G[A] :+: CNil
+object Shapoyo extends LowPriorityRichNat {
+  import Un._
 
-  implicit class RichNat[F[_], R[_]](val f: F ~> R) extends AnyVal {
-    def or[G[_]](g: G ~> R) = new ~>[({ type l[T] = CoproductA[F, G, T] })#l, R] {
-      def apply[T](c: F[T] :+: G[T] :+: CNil) = c match {
-        case Inl(h) => f(h)
-        case Inr(Inl(h)) => g(h)
-        case _ => throw new RuntimeException("impossible case")
+  implicit class RichNat[T, F[_] <: Coproduct, R[_]](val f: F ~> R)(implicit val u: +->+[T]#λ[F[T]]) {
+    def or[G[_]](g: G ~> R): ({type λ[T] = G[T] :+: F[T]})#λ ~> R = {
+      new ~>[({ type C[T] = G[T] :+: F[T] })#C, R] {
+        def apply[T](c: G[T] :+: F[T]): R[T] = c match {
+          case Inl(h) => g(h)
+          case Inr(t) => f(t)
+        }
       }
     }
   }
@@ -64,22 +76,23 @@ object Shapoyo {
 
 
 
+object Un {
+  trait UnaryAConstraint[C <: Coproduct, A]
 
-// trait UnaryAConstraint[C <: Coproduct, A]
+  type +->+[A] = {
+    type λ[C <: Coproduct] = UnaryAConstraint[C, A]
+  }
 
-// type +->+[A] = {
-//   type λ[C <: Coproduct] = UnaryAConstraint[C, A]
-// }
+  implicit def hnilUnaryTC[A] = new UnaryAConstraint[CNil, A] {}
+  implicit def hlistUnaryTC1[F[_], C <: Coproduct, A](implicit utct : UnaryAConstraint[C, A]) =
+    new UnaryAConstraint[F[A] :+: C, A] {}
 
-// implicit def hnilUnaryTC[A] = new UnaryAConstraint[CNil, A] {}
-// implicit def hlistUnaryTC1[F[_], C <: Coproduct, A](implicit utct : UnaryAConstraint[C, A]) =
-//   new UnaryAConstraint[F[A] :+: C, A] {}
+  implicit class CoproductA[A, C <: Coproduct : +->+[A]#λ](c: C) {
+    type CA[A] = CoproductA[A, C]
 
-// implicit class CoproductA[A, C <: Coproduct : +->+[A]#λ](c: C) {
-//   type CA[A] = CoproductA[A, C]
-
-//   def liftFreeC: Free.FreeC[CA, A] = {
-//     val ca: CA[A] = this
-//     Free.liftFC(ca)
-//   }
-// }
+    def liftFreeC: Free.FreeC[CA, A] = {
+      val ca: CA[A] = this
+      Free.liftFC(ca)
+    }
+  }
+}
