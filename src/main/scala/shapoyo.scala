@@ -24,7 +24,7 @@ trait LowPriorityRichNat {
 object Shapoyo extends LowPriorityRichNat {
   import Un._
 
-  implicit class RichNat[T, F[_] <: Coproduct, R[_]](val f: F ~> R)(implicit val u: +->+[T]#λ[F[T]]) {
+  implicit class RichNat[T, F[_] <: Coproduct, R[_]](val f: F ~> R)/*(implicit val u: +->+[T]#λ[F[T]])*/ {
     def or[G[_]](g: G ~> R): ({type λ[T] = G[T] :+: F[T]})#λ ~> R = {
       new ~>[({ type C[T] = G[T] :+: F[T] })#C, R] {
         def apply[T](c: G[T] :+: F[T]): R[T] = c match {
