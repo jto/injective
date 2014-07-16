@@ -129,7 +129,10 @@ class ShapelessSpec extends FlatSpec with Matchers {
     // THE EXECUTION
     val pi = new RichNat0(Console) or TestAuth
     type XX[T] = Interact[T] :+: Auth[T] :+: CNil
+    // compiles
     val ct: XX ~> Id = Console or TestAuth
+    // does not compile
+    // val ct: ({type L[T] = Interact[T] :+: Auth[T] :+: CNil})#L ~> Id = Console or TestAuth
     val lis = new RichNat(ct) or Logger
     // prg.mapSuspension(lis)
 
